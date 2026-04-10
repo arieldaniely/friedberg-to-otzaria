@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+
+output/
+output_sample/
+output_sample2/
+output_sample3/
+output_yoma_check/
+
+*.zip

@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version tag
+        required: true
+        default: v0.1.0
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Build output
+        run: python convert_friedberg.py --source ./פרידברג --output ./output
+
+      - name: Create zip archive
+        shell: python
+        run: |
+          from pathlib import Path
+          import zipfile
+
+          output_dir = Path("output")
+          zip_path = Path("הכי גרסינן.zip")
+
+          with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+              for path in sorted(output_dir.rglob("*")):
+                  if path.is_file():
+                      zf.write(path, path.relative_to(output_dir))
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          files: הכי גרסינן.zip
+          generate_release_notes: true
+          body: |
+            Converted personal-use output package for Otzaria compatibility.
+
+            Original material:
+            - https://fjms.genizah.org/index.htm
+            - https://pr.genizah.org/
+
+            Rights note:
+            - The original content belongs to the original rights holders.
+            - This release only republishes a reformatted package intended for personal use.

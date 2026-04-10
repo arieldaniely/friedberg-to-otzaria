@@ -1,0 +1,37 @@
+Custom Notice for This Repository
+
+Copyright (c) 2026 The repository author
+
+This repository contains:
+
+1. A conversion script and packaging metadata created for adapting source files
+   from the Friedberg Genizah Project / "הכי גרסינן" into a text format suitable
+   for personal use and compatibility with Otzaria.
+2. No claim of ownership over the original source texts or the original project
+   materials.
+
+Original source material:
+
+- Friedberg Genizah Project / הכי גרסינן
+- Source site: https://fjms.genizah.org/index.htm
+- About page: https://pr.genizah.org/
+
+Rights and restrictions:
+
+- All rights in the original content remain with the original rights holders.
+- The original material is not relicensed by this repository.
+- This repository only provides format conversion and release automation.
+- Use of the converted output should be treated as personal-use only unless the
+  original rights holders explicitly allow broader use.
+- Anyone redistributing source-derived output is responsible for confirming that
+  such redistribution complies with the original project's rights and terms.
+
+Repository code:
+
+Unless stated otherwise, the original code written in this repository
+(for example, conversion scripts and automation/workflow files) may be used,
+copied, modified, and distributed with attribution.
+
+No warranty:
+
+This repository and its code are provided "as is", without warranty of any kind.
