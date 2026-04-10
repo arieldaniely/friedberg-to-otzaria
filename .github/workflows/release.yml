@@ -86,7 +86,12 @@ jobs:
           output_dir = Path("output")
           zip_path = Path("הכי גרסינן.zip")
 
-          with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+          with zipfile.ZipFile(
+              zip_path,
+              "w",
+              compression=zipfile.ZIP_DEFLATED,
+              compresslevel=9,
+          ) as zf:
               for path in sorted(output_dir.rglob("*")):
                   if path.is_file():
                       zf.write(path, path.relative_to(output_dir))
