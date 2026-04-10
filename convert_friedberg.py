@@ -181,7 +181,7 @@ def wrap_token_indices(text: str, token_indices: set[int]) -> str:
         start_char = matches[start_index].start()
         end_char = matches[end_index].end()
         pieces.append(text[last_end:start_char])
-        pieces.append(f"<b><i>{text[start_char:end_char]}</i></b>")
+        pieces.append(f'<span style="color: red;">{text[start_char:end_char]}</span>')
         last_end = end_char
     pieces.append(text[last_end:])
     return "".join(pieces)
