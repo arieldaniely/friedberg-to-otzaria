@@ -20,7 +20,8 @@ from urllib.request import Request, urlopen
 
 
 SEFARIA_API_BASE = "https://www.sefaria.org/api/v3/texts"
-DEFAULT_TRACTATE = "מגילה"
+FRIEDBERG_FILE_PREFIX = "הכי גרסינן "
+FRIEDBERG_FILE_SUFFIX = ".txt"
 MAX_GROUP_SIZE = 3
 MIN_GROUP_SIMILARITY = 0.52
 SKIP_COST = 0.52
@@ -171,7 +172,7 @@ def parse_args() -> argparse.Namespace:
         "--tractate",
         action="append",
         default=None,
-        help="Tractate name to process. Repeat for multiple tractates.",
+        help="Tractate name to process. Repeat for multiple tractates. Omit to process all generated supported tractates.",
     )
     parser.add_argument(
         "--retry-attempts",
@@ -545,11 +546,34 @@ def ordered_unique(items: list[str]) -> list[str]:
     return ordered
 
 
+def discover_tractates(friedberg_dir: Path) -> list[str]:
+    available: set[str] = set()
+    for path in friedberg_dir.glob(f"{FRIEDBERG_FILE_PREFIX}*{FRIEDBERG_FILE_SUFFIX}"):
+        tractate_name = path.name[
+            len(FRIEDBERG_FILE_PREFIX) : -len(FRIEDBERG_FILE_SUFFIX)
+        ]
+        if tractate_name in TRACTATE_TO_SEFARIA:
+            available.add(tractate_name)
+        else:
+            warn(f"Skipping unsupported Friedberg output file: {path.name}")
+
+    tractates = [
+        tractate_name
+        for tractate_name in TRACTATE_TO_SEFARIA
+        if tractate_name in available
+    ]
+    if not tractates:
+        raise FileNotFoundError(
+            f"No supported Friedberg output files found in: {friedberg_dir}"
+        )
+    return tractates
+
+
 def load_friedberg_segments(
     tractate_name: str,
     friedberg_dir: Path,
 ) -> tuple[Path, list[AmudBlock]]:
-    output_path = friedberg_dir / f"הכי גרסינן {tractate_name}.txt"
+    output_path = friedberg_dir / f"{FRIEDBERG_FILE_PREFIX}{tractate_name}{FRIEDBERG_FILE_SUFFIX}"
     if not output_path.exists():
         raise FileNotFoundError(f"Missing Friedberg output file: {output_path}")
 
@@ -934,12 +958,17 @@ def generate_for_tractate(
 
 def main() -> int:
     args = parse_args()
-    tractates = args.tractate or [DEFAULT_TRACTATE]
     friedberg_dir = args.friedberg_dir.resolve()
     output_dir = args.output.resolve()
 
     if not friedberg_dir.exists():
         warn(f"Friedberg output directory does not exist: {friedberg_dir}")
+        return 1
+
+    try:
+        tractates = args.tractate or discover_tractates(friedberg_dir)
+    except FileNotFoundError as exc:
+        warn(str(exc))
         return 1
 
     for tractate_name in tractates:

@@ -59,7 +59,7 @@ jobs:
               major, minor, patch = max(versions)
               next_tag = f"v{major}.{minor}.{patch + 1}"
           else:
-              next_tag = "v0.1.0"
+              next_tag = "v0.2.0"
 
           github_output = os.environ["GITHUB_OUTPUT"]
           with open(github_output, "a", encoding="utf-8") as fh:
@@ -78,7 +78,7 @@ jobs:
         run: python convert_friedberg.py --source ./פרידברג --output ./output
 
       - name: Build Sefaria links
-        run: python generate_sefaria_links.py --friedberg-dir ./output --output ./output/links --tractate מגילה
+        run: python generate_sefaria_links.py --friedberg-dir ./output --output ./output/links
 
       - name: Create zip archive
         shell: python
@@ -92,7 +92,7 @@ jobs:
           with zipfile.ZipFile(
               zip_path,
               "w",
-              compression=zipfile.ZIP_BZIP2,
+              compression=zipfile.ZIP_DEFLATED,
               compresslevel=9,
           ) as zf:
               for path in sorted(output_dir.rglob("*")):
