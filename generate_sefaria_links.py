@@ -20,6 +20,7 @@ from urllib.request import Request, urlopen
 
 
 SEFARIA_API_BASE = "https://www.sefaria.org/api/v3/texts"
+DEFAULT_SEFARIA_DIR = Path("ספריא")
 FRIEDBERG_FILE_PREFIX = "הכי גרסינן "
 FRIEDBERG_FILE_SUFFIX = ".txt"
 MAX_GROUP_SIZE = 3
@@ -32,6 +33,7 @@ MIN_STABLE_TOKEN_COUNT = 3
 MIN_STABLE_LETTERS = 12
 
 HEADING_RE = re.compile(r"<h2>דף (?P<label>[^<]+)</h2>")
+TITLE_RE = re.compile(r"<h1>(?P<title>[^<]+)</h1>")
 TAG_RE = re.compile(r"<[^>]+>")
 WHITESPACE_RE = re.compile(r"\s+")
 HEBREW_PUNCT_RE = re.compile(r"[^0-9A-Za-z\u0590-\u05FF\s]")
@@ -167,6 +169,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("output") / "links",
         help="Directory where the generated link JSON files will be written.",
+    )
+    parser.add_argument(
+        "--sefaria-dir",
+        type=Path,
+        default=DEFAULT_SEFARIA_DIR,
+        help="Directory that contains local Sefaria tractate txt files. Falls back to the Sefaria API if a tractate file is missing.",
     )
     parser.add_argument(
         "--tractate",
@@ -308,6 +316,13 @@ def extract_amud_label(line: str) -> str | None:
     if not match:
         return None
     return clean_text(match.group("label"))
+
+
+def extract_book_title(line: str) -> str | None:
+    match = TITLE_RE.match(line)
+    if not match:
+        return None
+    return clean_text(match.group("title"))
 
 
 def parse_amud_label(amud_label: str) -> tuple[int, str]:
@@ -634,6 +649,95 @@ def load_friedberg_segments(
     return output_path, blocks
 
 
+def find_local_sefaria_file(tractate_name: str, sefaria_dir: Path) -> Path | None:
+    if not sefaria_dir.exists():
+        return None
+
+    matches = sorted(sefaria_dir.rglob(f"{tractate_name}.txt"))
+    if not matches:
+        return None
+    if len(matches) > 1:
+        warn(
+            f"Found multiple local Sefaria files for {tractate_name}; using {matches[0]}"
+        )
+    return matches[0]
+
+
+def load_local_sefaria_segments(
+    tractate_name: str,
+    sefaria_dir: Path,
+) -> tuple[Path, list[AmudBlock], int]:
+    sefaria_path = find_local_sefaria_file(tractate_name, sefaria_dir)
+    if sefaria_path is None:
+        raise FileNotFoundError(
+            f"Missing local Sefaria text file for {tractate_name} under: {sefaria_dir}"
+        )
+
+    book_name = tractate_name
+    segments_by_amud: dict[str, list[Segment]] = {}
+    amud_order: list[str] = []
+    current_amud: str | None = None
+    segment_counter_by_amud: dict[str, int] = {}
+    line_count = 0
+
+    for line_index, raw_line in enumerate(sefaria_path.read_text(encoding="utf-8").splitlines(), start=1):
+        line_count = line_index
+
+        title = extract_book_title(raw_line)
+        if title is not None:
+            book_name = title
+            continue
+
+        amud_label = extract_amud_label(raw_line)
+        if amud_label is not None:
+            current_amud = amud_label
+            amud_order.append(amud_label)
+            segments_by_amud.setdefault(amud_label, [])
+            continue
+
+        text = clean_text(raw_line)
+        if current_amud is None or not text:
+            continue
+
+        segment_counter_by_amud[current_amud] = segment_counter_by_amud.get(current_amud, 0) + 1
+        segment_index = segment_counter_by_amud[current_amud]
+        segments_by_amud[current_amud].append(
+            Segment(
+                tractate_name=tractate_name,
+                book_name=book_name,
+                amud_label=current_amud,
+                segment_index=segment_index,
+                line_index=line_index,
+                he_ref=build_segment_ref(book_name, current_amud, segment_index),
+                text=text,
+                normalized_text=normalize_compare_text(text),
+            )
+        )
+
+    blocks: list[AmudBlock] = []
+    for amud_label in ordered_unique(amud_order):
+        amud_segments = segments_by_amud.get(amud_label, [])
+        if not amud_segments:
+            continue
+        combined_text = " ".join(
+            segment.normalized_text for segment in amud_segments if segment.normalized_text
+        )
+        blocks.append(
+            AmudBlock(
+                label=amud_label,
+                source_ref=f"{book_name} {amud_label}",
+                normalized_text=combined_text,
+                alignment_text=build_alignment_signature(combined_text),
+                segments=amud_segments,
+            )
+        )
+
+    if not blocks:
+        raise ValueError(f"No Sefaria amud blocks found in: {sefaria_path}")
+
+    return sefaria_path, blocks, line_count
+
+
 def fetch_sefaria_amud(
     tref: str,
     retry_attempts: int,
@@ -779,6 +883,7 @@ def generate_for_tractate(
     tractate_name: str,
     friedberg_dir: Path,
     output_dir: Path,
+    sefaria_dir: Path,
     retry_attempts: int,
     retry_backoff: float,
 ) -> tuple[Path, Path, Path]:
@@ -788,12 +893,25 @@ def generate_for_tractate(
         raise ValueError(f"Unsupported tractate for Sefaria link generation: {tractate_name}") from exc
 
     friedberg_path, friedberg_blocks = load_friedberg_segments(tractate_name, friedberg_dir)
-    sefaria_blocks, virtual_line_count = build_virtual_sefaria_segments(
-        tractate_name=tractate_name,
-        sefaria_title=sefaria_title,
-        retry_attempts=retry_attempts,
-        retry_backoff=retry_backoff,
-    )
+    sefaria_path = find_local_sefaria_file(tractate_name, sefaria_dir)
+    if sefaria_path is not None:
+        sefaria_text_source = "local"
+        sefaria_file, sefaria_blocks, virtual_line_count = load_local_sefaria_segments(
+            tractate_name=tractate_name,
+            sefaria_dir=sefaria_dir,
+        )
+    else:
+        sefaria_text_source = "api"
+        sefaria_file = None
+        warn(
+            f"Missing local Sefaria file for {tractate_name} under {sefaria_dir}; falling back to Sefaria API."
+        )
+        sefaria_blocks, virtual_line_count = build_virtual_sefaria_segments(
+            tractate_name=tractate_name,
+            sefaria_title=sefaria_title,
+            retry_attempts=retry_attempts,
+            retry_backoff=retry_backoff,
+        )
 
     amud_matches, unmatched_friedberg_blocks, unmatched_sefaria_blocks = align_sequences(
         [block.alignment_text for block in friedberg_blocks],
@@ -927,9 +1045,11 @@ def generate_for_tractate(
         "tractate": tractate_name,
         "friedbergFile": str(friedberg_path),
         "sefariaBook": sefaria_title,
+        "sefariaTextSource": sefaria_text_source,
+        "sefariaFile": str(sefaria_file) if sefaria_file is not None else None,
         "lineIndexModel": {
             "friedberg": "1-based line number of the Vilna witness line inside הכי גרסינן output",
-            "sefaria": "1-based virtual line number assuming <h1>, then <h2> per amud, then one line per Sefaria segment",
+            "sefaria": "1-based line number inside the local Sefaria txt file, or a virtual line number for API fallback",
             "virtualLineCount": virtual_line_count,
         },
         "outputFiles": {
@@ -960,6 +1080,7 @@ def main() -> int:
     args = parse_args()
     friedberg_dir = args.friedberg_dir.resolve()
     output_dir = args.output.resolve()
+    sefaria_dir = args.sefaria_dir.resolve()
 
     if not friedberg_dir.exists():
         warn(f"Friedberg output directory does not exist: {friedberg_dir}")
@@ -977,6 +1098,7 @@ def main() -> int:
             tractate_name=tractate_name,
             friedberg_dir=friedberg_dir,
             output_dir=output_dir,
+            sefaria_dir=sefaria_dir,
             retry_attempts=args.retry_attempts,
             retry_backoff=args.retry_backoff,
         )

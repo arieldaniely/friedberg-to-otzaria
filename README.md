@@ -49,13 +49,15 @@ python convert_friedberg.py --source .\פרידברג --output .\output
 python convert_friedberg.py --source .\פרידברג --output .\output --tractate ברכות
 ```
 
-ליצירת קישורי אוצריא על בסיס Sefaria API:
+ליצירת קישורי אוצריא מול טקסט Sefaria מקומי:
 
 ```bash
 python generate_sefaria_links.py --friedberg-dir .\output --output .\output\links
 ```
 
-הסקריפט פונה ל־Sefaria API, ולכן דורש חיבור רשת בזמן הריצה.
+כברירת מחדל הסקריפט מחפש את קובצי Sefaria תחת `ספריא/`, למשל `ספריא/סדר מועד/מגילה.txt`.
+אם צריך להשתמש בתיקייה אחרת, ניתן להוסיף `--sefaria-dir <תיקייה>`.
+אם לא נמצא קובץ מקומי למסכת, הסקריפט נופל חזרה ל־Sefaria API ולכן רק במקרה כזה דורש חיבור רשת בזמן הריצה.
 ליצירת קישורים למסכת אחת בלבד, ניתן להוסיף `--tractate מגילה`; ללא `--tractate` הסקריפט מעבד את כל קובצי הפלט הנתמכים.
 הוא מדלג על עוגנים קצרים מדי, כגון `גמ'` ללא טקסט נוסף, כדי להימנע מקישורים חלשים.
 מספר הדילוגים נשמר בדוח ההתאמה תחת `skippedUnstablePairs`.
