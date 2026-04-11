@@ -49,11 +49,23 @@ python convert_friedberg.py --source .\פרידברג --output .\output
 python convert_friedberg.py --source .\פרידברג --output .\output --tractate ברכות
 ```
 
+ליצירת קישורי אוצריא על בסיס Sefaria API:
+
+```bash
+python generate_sefaria_links.py --friedberg-dir .\output --output .\output\links --tractate מגילה
+```
+
+הסקריפט פונה ל־Sefaria API, ולכן דורש חיבור רשת בזמן הריצה.
+הוא מדלג על עוגנים קצרים מדי, כגון `גמ'` ללא טקסט נוסף, כדי להימנע מקישורים חלשים.
+מספר הדילוגים נשמר בדוח ההתאמה תחת `skippedUnstablePairs`.
+
 ## פלט
 
 - קובצי המקור נשארים בתיקיית `פרידברג/`
 - הפלט נכתב לתיקיית `output/`
 - כל מסכת נשמרת כקובץ `הכי גרסינן <שם מסכת>.txt`
+- קובצי קישורים נכתבים לתיקיית `output/links/`
+- דוחות התאמה נכתבים לתיקיית `output/links/reports/`
 
 ## הפצה אוטומטית
 
@@ -63,6 +75,7 @@ python convert_friedberg.py --source .\פרידברג --output .\output --tracta
 
 - מתקין את Python והתלויות
 - מריץ את ההמרה
+- יוצר קישורי `links/` מול Sefaria עבור `מגילה`
 - יוצר ZIP בשם `הכי גרסינן.zip`
 - מפרסם GitHub Release עם הקובץ המצורף
 
